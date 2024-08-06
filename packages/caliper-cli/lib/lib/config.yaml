@@ -67,3 +67,8 @@ sut:
         1.4: &besu-latest
             packages: ['web3@1.3.0']
         latest: *besu-latest
+
+    substrate:
+        1.14: &substrate-latest
+            packages: []
+        latest: *substrate-latest
