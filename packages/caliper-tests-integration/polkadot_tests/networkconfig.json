@@ -1,0 +1,16 @@
+{
+    "caliper": {
+        "blockchain": "../../caliper-polkadot/index.js",
+        "command" : {
+            "start": "docker compose -f config/docker-compose.yml up -d && sleep 10s",
+            "end" : "docker compose -f config/docker-compose.yml down"
+          }
+    },
+    "polkadot": {
+        "url": "ws://localhost:9944",
+        "seeds": [
+            "//Alice",
+            "//Bob"
+        ]
+    }
+}
