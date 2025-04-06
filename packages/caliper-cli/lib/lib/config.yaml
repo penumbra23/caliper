@@ -71,3 +71,4 @@ sut:
 
     polkadot:
         latest:
+            packages: ['@polkadot/api@15.9.1','@polkadot/util@13.4.3']
