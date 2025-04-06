@@ -156,8 +156,8 @@ class PolkadotConnector extends ConnectorBase {
                     if (status.isInBlock || status.isFinalized) {
                         if (!dispatchError) {
                             txSuccess(txStatus, txHash)
-                            resolve(txStatus);
                             unsub();
+                            resolve(txStatus);
                             return;
                         }
 
@@ -182,10 +182,10 @@ class PolkadotConnector extends ConnectorBase {
                                 }
                             });
                         txFailed(txStatus, msg);
-                        resolve(txStatus);
                         unsub();
+                        resolve(txStatus);
                     }
-            });
+                });
         });
     }
 

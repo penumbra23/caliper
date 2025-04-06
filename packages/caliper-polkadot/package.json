@@ -1,7 +1,7 @@
 {
-    "name": "@hyperledger/caliper-polkadot",
+    "name": "penumbra23/caliper-polkadot",
     "description": "Polkadot connector for Caliper, enabling the running of performance benchmarks that interact with Substrate based chains",
-    "version": "0.6.1-unstable",
+    "version": "0.0.1-unstable",
     "repository": {
         "type": "git",
         "url": "https://github.com/hyperledger-caliper/caliper",
