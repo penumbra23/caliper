@@ -1,6 +1,6 @@
 {
     "caliper": {
-        "blockchain": "../../caliper-polkadot/index.js",
+        "blockchain": "polkadot",
         "command" : {
             "start": "docker compose -f config/docker-compose.yml up -d && sleep 10s",
             "end" : "docker compose -f config/docker-compose.yml down"

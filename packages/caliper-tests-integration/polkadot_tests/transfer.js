@@ -19,6 +19,31 @@ const { WorkloadModuleBase } = require('@hyperledger/caliper-core');
 
 /**
  * Workload module for transferring money between accounts.
+ * This example demonstrates the basic usage of the PolkadotConnector.
+ * 
+ * The minimal configuration needs the consumer to specify the pallet and 
+ * extrinsic names with the provided arguments to the method.
+ * 
+ * The pallet, extrinsic and args are passed straight into the PolkadotJS API
+ * instance as they are writen in the submitTransaction.
+ * 
+ * @example 
+ * 
+ * // This
+ * const args = {
+ *       pallet: 'balances',
+ *       extrinsic: 'transferKeepAlive',
+ *       args: [
+ *           '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+ *           100000000000
+ *       ]
+ *   };
+ *
+ * // translets to this 
+ * 
+ * api.balances.transferKeepAlive('5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty', 100000000000)
+ * 
+ * @see https://polkadot.js.org/docs/api/cookbook/tx#how-do-i-estimate-the-transaction-fees
  */
 class SimpleTransferWorkload extends WorkloadModuleBase {
 
@@ -33,12 +58,13 @@ class SimpleTransferWorkload extends WorkloadModuleBase {
      * Assemble TXs for transferring money.
      */
     async submitTransaction() {
+        // Transfer to Bob account
         const args = {
             pallet: 'balances',
             extrinsic: 'transferKeepAlive',
             args: [
-                'an96zB2862d4YdhcqQXNBep4NDLHFUdSVuSbhwfKmeGVQPCpw',
-                123000000000
+                '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+                100000000000
             ]
         };
 

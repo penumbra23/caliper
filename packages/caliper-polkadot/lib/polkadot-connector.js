@@ -61,8 +61,6 @@ class PolkadotConnector extends ConnectorBase {
                 'Please use WebSocket connections for Substrate RPC'
             );
         }
-
-        //TODO: add validation logic for the rest of the configuration object
     }
 
     /**
@@ -76,6 +74,7 @@ class PolkadotConnector extends ConnectorBase {
 
     /**
      * Deploy smart contracts specified in the network configuration file.
+     * **NOTE**: Still not being used
      * @return {object} Promise execution for all the contract creations.
      */
     async installSmartContract() {
@@ -117,78 +116,147 @@ class PolkadotConnector extends ConnectorBase {
     }
 
     /**
+     * Fails a transaction status by setting the fail flag and error message.
+     * @param {TxStatus} txStatus TxStatus
+     * @param {Error} err Error message to be set
+     * @param {PromiseLike<TxStatus>} resolve Resolves the promise
+     */
+    _failTx(txStatus, err, resolve) {
+        txStatus.SetErrMsg(err);
+        txStatus.SetStatusFail();
+        resolve(txStatus);
+    }
+
+    /**
+     * Sets a successful completition on the transaction status.
+     * @param {TxStatus} txStatus TxStatus
+     * @param {string} hash Transaction hash 
+     * @param {PromiseLike<TxStatus>} resolve Resolves the promise
+     */
+    _completeTx(txStatus, hash, resolve) {
+        txStatus.SetID(hash);
+        txStatus.SetResult(hash);
+        txStatus.SetVerification(true);
+        txStatus.SetStatusSuccess();
+        resolve(txStatus);
+    }
+
+    /**
      * Submit a transaction to the Polkadot context.
      * @param {PolkadotTx} request Methods call data.
      * @return {Promise<TxStatus>} Result and stats of the transaction invocation.
      */
     async _sendSingleRequest(request) {
+        // We don't use reject because the method needs to resolve to
+        // either a failed or successful tx
+        return new Promise(async (resolve, reject) => {
+            const txStatus = new TxStatus();
+            txStatus.SetTimeCreate(Date.now());
+
+            if (request.signedTx) {
+                await this._handleSignedTx(request.signedTx, txStatus, resolve);
+            } else {
+                await this._handleWorkerSigning(request, txStatus, resolve);
+            }
+            
+        });
+    }
+
+    /**
+     * Handles workload runs with a signed transaction. Useful for singing in the
+     * workload module instead.
+     * 
+     * @param {string} signedTx Signed transaction as a hex string
+     * @param {TxStatus} txStatus TxStatus
+     * @param {PromiseLike<TxStatus>} resolve Resolves the promise
+     */
+    async _handleSignedTx(signedTx, txStatus, resolve) {
+        const context = this.context;
+        const unsub = await context.api.tx(signedTx).send(({status, events, txHash, dispatchError}) => {
+            if (status.isInBlock || status.isFinalized) {
+                if (!dispatchError) {
+                    this._completeTx(txStatus, txHash, resolve)
+                    unsub();
+                    return;
+                }
+
+                logger.error(`
+                    Failed tx ${signedTx};
+                    dispatchError: ${dispatchError.toString()}`
+                );
+
+                // TODO: handle Sudo calls
+                
+                let msg = new String();
+                events
+                    .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
+                    .forEach(({ event: { data: [error] } }) => {
+                        if (error.isModule) {
+                            const decoded = this.api.registry.findMetaError(error.asModule);
+                            const { docs } = decoded;
+                            msg = msg + docs.join(' ');
+                        } else {
+                            msg = msg + error.toString()
+                        }
+                    });
+                this._failTx(txStatus, msg, resolve);
+                unsub();
+            }
+        });
+    }
+
+    /**
+     * Signs and submits the transaction. This method uses the provided keys
+     * in the network config file and takes care of increasing the nonce. 
+     * 
+     * @param {PolkadotRequest} request 
+     * @param {TxStatus} txStatus TxStatus
+     * @param {PromiseLike<TxStatus>} resolve 
+     */
+    async _handleWorkerSigning(request, txStatus, resolve) {
         const context = this.context;
         
         const pallet = request.pallet;
         const extrinsic = request.extrinsic;
         const payload = request.args;
 
-        // Set the status as failed
-        const txFailed = (status, err) => {
-            status.SetErrMsg(err);
-            status.SetStatusFail();
-        };
-
-        // Completes the task as successful setting the hash as the ID
-        const txSuccess = (status, hash) => {
-            status.SetID(hash);
-            status.SetResult(hash);
-            status.SetVerification(true);
-            status.SetStatusSuccess();
-        };
-        
-        // Get the last valid nonce and update
         const nonce = context.nonce;
         context.nonce = context.nonce.add(new BN(1));
-        
-        // We don't use reject because the method needs to resolve to
-        // either a failed or successful tx
-        return new Promise(async (resolve, reject) => {
-            const txStatus = new TxStatus();
-            txStatus.SetTimeCreate(Date.now());
-            const unsub = await context.api.tx[pallet][extrinsic](...payload)
-                .signAndSend(context.keyPair, { nonce }, ({ status, events, txHash, dispatchError}) => {
-                    if (status.isInBlock || status.isFinalized) {
-                        if (!dispatchError) {
-                            txSuccess(txStatus, txHash)
-                            unsub();
-                            resolve(txStatus);
-                            return;
-                        }
 
-                        logger.error(`
-                            Failed tx on ${pallet}:${extrinsic};
-                            nonce: ${context.nonce};
-                            dispatchError: ${dispatchError.toString()}`
-                        );
-
-                        // TODO: handle Sudo calls
-                        
-                        let msg = new String();
-                        events
-                            .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
-                            .forEach(({ event: { data: [error, info] } }) => {
-                                if (error.isModule) {
-                                    const decoded = this.api.registry.findMetaError(error.asModule);
-                                    const { docs } = decoded;
-                                    msg = msg + docs.join(' ');
-                                } else {
-                                    msg = msg + error.toString()
-                                }
-                            });
-                        txFailed(txStatus, msg);
+        const unsub = await context.api.tx[pallet][extrinsic](...payload)
+            .signAndSend(context.keyPair, { nonce }, ({ status, events, txHash, dispatchError }) => {
+                if (status.isInBlock || status.isFinalized) {
+                    if (!dispatchError) {
+                        this._completeTx(txStatus, txHash, resolve)
                         unsub();
-                        resolve(txStatus);
+                        return;
                     }
-                });
-        });
-    }
 
+                    logger.error(`
+                        Failed tx on ${pallet}:${extrinsic};
+                        nonce: ${context.nonce};
+                        dispatchError: ${dispatchError.toString()}`
+                    );
+
+                    // TODO: handle Sudo calls
+                    
+                    let msg = new String();
+                    events
+                        .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
+                        .forEach(({ event: { data: [error, info] } }) => {
+                            if (error.isModule) {
+                                const decoded = this.api.registry.findMetaError(error.asModule);
+                                const { docs } = decoded;
+                                msg = msg + docs.join(' ');
+                            } else {
+                                msg = msg + error.toString()
+                            }
+                        });
+                    this._failTx(txStatus, msg, resolve);
+                    unsub();
+                }
+            });
+    }
     /**
      * It passes deployed contracts addresses to all workers (only known after deploy contract)
      * @param {Number} number of workers to prepare

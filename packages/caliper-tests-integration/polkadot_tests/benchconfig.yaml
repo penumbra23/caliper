@@ -19,13 +19,22 @@ params:
 
 test:
     workers:
-        number: 2
+        number: 1
     rounds:
     - label: transfer
-      txNumber: 3000
-      rateControl: { type: 'fixed-rate', opts: { tps: 200 } }
+      txNumber: 500
+      rateControl: { type: 'fixed-rate', opts: { tps: 50 } }
       workload:
           module: ./transfer.js
+          arguments:
+              accountPhasePrefix: *prefix
+              numberOfAccounts: *accounts
+              money: 100
+    - label: transferSigned
+      txNumber: 500
+      rateControl: { type: 'fixed-rate', opts: { tps: 50 } }
+      workload:
+          module: ./transferSigned.js
           arguments:
               accountPhasePrefix: *prefix
               numberOfAccounts: *accounts
