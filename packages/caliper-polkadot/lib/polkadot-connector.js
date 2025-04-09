@@ -15,7 +15,7 @@
 'use strict';
 
 const { Keyring, ApiPromise, WsProvider } = require('@polkadot/api');
-const { BN } = require("@polkadot/util");
+const { BN } = require('@polkadot/util');
 
 const { ConnectorBase, CaliperUtils, ConfigUtil, TxStatus } = require('@hyperledger/caliper-core');
 
@@ -56,9 +56,9 @@ class PolkadotConnector extends ConnectorBase {
             );
         }
 
-        if (!polkadotConfig.url.toLowerCase().includes('ws')) {
+        if (!polkadotConfig.url.toLowerCase().startsWith('ws://') && !polkadotConfig.url.toLowerCase().startsWith('wss://')) {
             throw new Error(
-                'Please use WebSocket connections for Substrate RPC'
+                'URL needs to be a Websocket connection.'
             );
         }
     }
@@ -78,13 +78,13 @@ class PolkadotConnector extends ConnectorBase {
      * @return {object} Promise execution for all the contract creations.
      */
     async installSmartContract() {
-        return Promise.resolve()
+        return Promise.resolve();
     }
 
     /**
      * Return the Polkadot context associated with the given callback module name.
      * @param {Number} roundIndex The zero-based round index of the test.
-     * @param {object} args worker arguments.
+     * @param {object} args Worker arguments returned by prepareWorkerArguments.
      * @return {object} The assembled Polkadot context.
      * @async
      */
@@ -92,8 +92,8 @@ class PolkadotConnector extends ConnectorBase {
         this.provider = new WsProvider(this.polkadotConfig.url);
         this.api = await ApiPromise.create({ provider: this.provider });
         // TODO: make key type adjustable via config
-        const keyring = new Keyring({ type: 'sr25519' });
-        const keyPair = keyring.addFromUri(args.seed);
+        const keyring = new Keyring({ type: args.key.type || 'sr25519' });
+        const keyPair = keyring.addFromUri(args.key.uri);
         let context = {
             clientIndex: this.workerIndex,
             nonce: new BN(0),
@@ -130,7 +130,7 @@ class PolkadotConnector extends ConnectorBase {
     /**
      * Sets a successful completition on the transaction status.
      * @param {TxStatus} txStatus TxStatus
-     * @param {string} hash Transaction hash 
+     * @param {string} hash Transaction hash
      * @param {PromiseLike<TxStatus>} resolve Resolves the promise
      */
     _completeTx(txStatus, hash, resolve) {
@@ -153,19 +153,24 @@ class PolkadotConnector extends ConnectorBase {
             const txStatus = new TxStatus();
             txStatus.SetTimeCreate(Date.now());
 
-            if (request.signedTx) {
-                await this._handleSignedTx(request.signedTx, txStatus, resolve);
-            } else {
-                await this._handleWorkerSigning(request, txStatus, resolve);
+            try {
+                if (request.signedTx) {
+                    await this._handleSignedTx(request.signedTx, txStatus, resolve);
+                } else {
+                    await this._handleWorkerSigning(request, txStatus, resolve);
+                }
             }
-            
+            catch(err) {
+                logger.error(`Error on submission: ${err}`);
+                this._failTx(txStatus, err, resolve);
+            }
         });
     }
 
     /**
      * Handles workload runs with a signed transaction. Useful for singing in the
      * workload module instead.
-     * 
+     *
      * @param {string} signedTx Signed transaction as a hex string
      * @param {TxStatus} txStatus TxStatus
      * @param {PromiseLike<TxStatus>} resolve Resolves the promise
@@ -175,7 +180,7 @@ class PolkadotConnector extends ConnectorBase {
         const unsub = await context.api.tx(signedTx).send(({status, events, txHash, dispatchError}) => {
             if (status.isInBlock || status.isFinalized) {
                 if (!dispatchError) {
-                    this._completeTx(txStatus, txHash, resolve)
+                    this._completeTx(txStatus, txHash, resolve);
                     unsub();
                     return;
                 }
@@ -186,7 +191,7 @@ class PolkadotConnector extends ConnectorBase {
                 );
 
                 // TODO: handle Sudo calls
-                
+
                 let msg = new String();
                 events
                     .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
@@ -196,7 +201,7 @@ class PolkadotConnector extends ConnectorBase {
                             const { docs } = decoded;
                             msg = msg + docs.join(' ');
                         } else {
-                            msg = msg + error.toString()
+                            msg = msg + error.toString();
                         }
                     });
                 this._failTx(txStatus, msg, resolve);
@@ -207,55 +212,58 @@ class PolkadotConnector extends ConnectorBase {
 
     /**
      * Signs and submits the transaction. This method uses the provided keys
-     * in the network config file and takes care of increasing the nonce. 
-     * 
-     * @param {PolkadotRequest} request 
+     * in the network config file and takes care of increasing the nonce.
+     *
+     * @param {PolkadotRequest} request PolkadotConnector request
      * @param {TxStatus} txStatus TxStatus
-     * @param {PromiseLike<TxStatus>} resolve 
+     * @param {PromiseLike<TxStatus>} resolve Resolves the promise
      */
     async _handleWorkerSigning(request, txStatus, resolve) {
         const context = this.context;
-        
+
         const pallet = request.pallet;
         const extrinsic = request.extrinsic;
         const payload = request.args;
 
+        // Add this before nonce increment
+        // In this way we avoid client errors before nonce management
+        const tx = context.api.tx[pallet][extrinsic](...payload);
+
         const nonce = context.nonce;
         context.nonce = context.nonce.add(new BN(1));
 
-        const unsub = await context.api.tx[pallet][extrinsic](...payload)
-            .signAndSend(context.keyPair, { nonce }, ({ status, events, txHash, dispatchError }) => {
-                if (status.isInBlock || status.isFinalized) {
-                    if (!dispatchError) {
-                        this._completeTx(txStatus, txHash, resolve)
-                        unsub();
-                        return;
-                    }
-
-                    logger.error(`
-                        Failed tx on ${pallet}:${extrinsic};
-                        nonce: ${context.nonce};
-                        dispatchError: ${dispatchError.toString()}`
-                    );
-
-                    // TODO: handle Sudo calls
-                    
-                    let msg = new String();
-                    events
-                        .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
-                        .forEach(({ event: { data: [error, info] } }) => {
-                            if (error.isModule) {
-                                const decoded = this.api.registry.findMetaError(error.asModule);
-                                const { docs } = decoded;
-                                msg = msg + docs.join(' ');
-                            } else {
-                                msg = msg + error.toString()
-                            }
-                        });
-                    this._failTx(txStatus, msg, resolve);
+        const unsub = await tx.signAndSend(context.keyPair, { nonce }, ({ status, events, txHash, dispatchError }) => {
+            if (status.isInBlock || status.isFinalized) {
+                if (!dispatchError) {
+                    this._completeTx(txStatus, txHash, resolve);
                     unsub();
+                    return;
                 }
-            });
+
+                logger.error(`
+                    Failed tx on ${pallet}:${extrinsic};
+                    nonce: ${context.nonce};
+                    dispatchError: ${dispatchError.toString()}`
+                );
+
+                // TODO: handle Sudo calls
+
+                let msg = new String();
+                events
+                    .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
+                    .forEach(({ event: { data: [error, info] } }) => {
+                        if (error.isModule) {
+                            const decoded = this.api.registry.findMetaError(error.asModule);
+                            const { docs } = decoded;
+                            msg = msg + docs.join(' ');
+                        } else {
+                            msg = msg + error.toString();
+                        }
+                    });
+                this._failTx(txStatus, msg, resolve);
+                unsub();
+            }
+        });
     }
     /**
      * It passes deployed contracts addresses to all workers (only known after deploy contract)
@@ -266,12 +274,15 @@ class PolkadotConnector extends ConnectorBase {
     async prepareWorkerArguments(number) {
         let result = [];
         if (this.polkadotConfig.seeds.length < number) {
-            throw new Error(`Not enough seeds provided; config.seeds ${this.polkadotConfig.seeds.length} < ${number}`)
+            throw new Error(`Not enough seeds provided; config.seeds ${this.polkadotConfig.seeds.length} < ${number}`);
         }
         for (let i = 0 ; i<= number ; i++) {
-            const path = this.polkadotConfig.seeds[i];
+            const uri = this.polkadotConfig.seeds[i].uri;
             result[i] = {
-                seed: path
+                key: {
+                    uri,
+                    type: this.polkadotConfig.seeds[i].type || 'sr25519',
+                }
             };
         }
         return result;

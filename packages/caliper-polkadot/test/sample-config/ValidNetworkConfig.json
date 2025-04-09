@@ -1,0 +1,24 @@
+{
+    "caliper": {
+        "blockchain": "polkadot",
+        "command" : {
+            "start": "docker compose up -d",
+            "end" : "docker compose down"
+          }
+    },
+    "polkadot": {
+        "url": "ws://localhost:9944",
+        "seeds": [
+            {
+                "uri": "//Alice"
+            },
+            {
+                "uri": "//Bob"
+            },
+            {
+                "uri": "//Charlie",
+                "type": "ed25519"
+            }
+        ]
+    }
+}
