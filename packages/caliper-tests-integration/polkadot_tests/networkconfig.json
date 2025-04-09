@@ -9,8 +9,12 @@
     "polkadot": {
         "url": "ws://localhost:9944",
         "seeds": [
-            "//Alice",
-            "//Bob"
+            {
+                "uri": "//Alice"
+            },
+            {
+                "uri": "//Bob"
+            }
         ]
     }
 }
