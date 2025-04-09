@@ -31,6 +31,7 @@ const { WsProvider, ApiPromise, Keyring, BN, hash } = require('../stubs/Stubs.js
 
 describe('A Connector Configuration Factory', () => {
     let PolkadotConnector;
+    let ConnectorFactory;
 
     before(() => {
         mockery.enable({
@@ -52,6 +53,14 @@ describe('A Connector Configuration Factory', () => {
         mockery.registerMock('@polkadot/util/package', { verison: '13.4.3' });
 
         PolkadotConnector = require('../../lib/polkadot-connector.js');
+        ConnectorFactory = require('../../lib/connectorFactory.js');
+    });
+
+    it('should create connector from factory', async () => {
+        ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfig));
+        const connector = await ConnectorFactory.ConnectorFactory(1);
+        connector.should.be.instanceOf(PolkadotConnector);
+        chai.expect(connector.bcType === 'polkadot');
     });
 
     it('should reject non WS URL', async () => {
