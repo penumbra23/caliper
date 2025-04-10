@@ -35,7 +35,14 @@ class PolkadotConnector extends ConnectorBase {
         super(workerIndex, bcType);
 
         let configPath = CaliperUtils.resolvePath(ConfigUtil.get(ConfigUtil.keys.NetworkConfig));
-        let polkadotConfig = require(configPath).polkadot;
+        let polkadotConfig = undefined;
+        if (configPath.endsWith('json')) {
+            polkadotConfig = require(configPath).polkadot;
+        } else if (configPath.endsWith('yaml') || configPath.endsWith('yml')) {
+            polkadotConfig = CaliperUtils.parseYaml(configPath).polkadot;
+        } else {
+            throw new Error('Network config file needs to be YAML or JSON.');
+        }
         // throws on configuration error
         this.checkConfig(polkadotConfig);
 
