@@ -43,7 +43,9 @@
         "file_types": [
             ".yml",
             ".md",
-            "log"
+            "log",
+            ".yaml",
+            ".ini"
         ],
         "insert_license": false,
         "license_formats": {
