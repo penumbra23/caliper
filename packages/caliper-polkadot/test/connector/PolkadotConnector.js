@@ -24,6 +24,8 @@ const mockery = require('mockery');
 const validConfig = './../sample-config/ValidNetworkConfig.json';
 const invalidConfigNonWs = './../sample-config/InvalidNetworkConfigNonWs.json';
 const invalidConfigNoURL= './../sample-config/InvalidNetworkConfigNoURL.json';
+const validConfigYaml = './../sample-config/ValidNetworkConfig.yaml';
+const invalidConfigIni ='./../sample-config/InalidNetworkConfig.ini';
 
 const { ConfigUtil } = require('@hyperledger/caliper-core');
 
@@ -56,11 +58,23 @@ describe('A Connector Configuration Factory', () => {
         ConnectorFactory = require('../../lib/connectorFactory.js');
     });
 
-    it('should create connector from factory', async () => {
+    it('should create connector from factory with JSON config', async () => {
         ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfig));
         const connector = await ConnectorFactory.ConnectorFactory(1);
         connector.should.be.instanceOf(PolkadotConnector);
         chai.expect(connector.bcType === 'polkadot');
+    });
+
+    it('should create connector from factory with YAML config', async () => {
+        ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfigYaml));
+        const connector = await ConnectorFactory.ConnectorFactory(1);
+        connector.should.be.instanceOf(PolkadotConnector);
+        chai.expect(connector.bcType === 'polkadot');
+    });
+
+    it('should fail creating connector from non-JSON or non-YAML config', async () => {
+        ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, invalidConfigIni));
+        chai.expect(() => new PolkadotConnector(1, 'polkadot')).to.throw('Network config file needs to be YAML or JSON.');
     });
 
     it('should reject non WS URL', async () => {
