@@ -71,7 +71,8 @@
             "generator_tests/fabric/.gitignore",
             "generator_tests/fabric/config/.gitignore",
             "generator_tests/fabric/config/bin",
-            "generator_tests/fabric/config/config"
+            "generator_tests/fabric/config/config",
+            "polkadot_tests/.gitignore"
         ],
         "file_type_method": "EXCLUDE",
         "file_types": [
