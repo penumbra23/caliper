@@ -22,6 +22,7 @@ const path = require('path');
 const mockery = require('mockery');
 
 const validConfig = './../sample-config/ValidNetworkConfig.json';
+const validConfigMasterSeed = './../sample-config/ValidNetworkConfigMasterSeed.json';
 const invalidConfigNonWs = './../sample-config/InvalidNetworkConfigNonWs.json';
 const invalidConfigNoURL= './../sample-config/InvalidNetworkConfigNoURL.json';
 const validConfigYaml = './../sample-config/ValidNetworkConfig.yaml';
@@ -114,6 +115,15 @@ describe('A Connector Configuration Factory', () => {
         chai.assert(result[0].url === 'ws://localhost:9944');
         chai.assert(result[1].url === 'ws://rpc.polkadot.example.com');
         chai.assert(result[2].url === 'ws://localhost:9944');
+    });
+
+    it('should prepare worker args with master seed config', async () => {
+        ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfigMasterSeed));
+        const connector = new PolkadotConnector(1, 'polkadot');
+        const result = await connector.prepareWorkerArguments(3).should.not.be.rejected;
+        chai.assert(result[0].key.uri === 'test test test test test test test test test test//0');
+        chai.assert(result[1].key.uri === 'test test test test test test test test test test//1');
+        chai.assert(result[2].key.uri === 'test test test test test test test test test test//2');
     });
 
     it('should throw on incorrect number of seeds', async () => {

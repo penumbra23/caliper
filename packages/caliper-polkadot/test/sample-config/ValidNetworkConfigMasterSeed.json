@@ -1,0 +1,16 @@
+{
+    "caliper": {
+        "blockchain": "polkadot",
+        "command" : {
+            "start": "docker compose up -d",
+            "end" : "docker compose down"
+          }
+    },
+    "polkadot": {
+        "urls": [
+            "ws://localhost:9944",
+            "ws://rpc.polkadot.example.com"
+        ],
+        "masterSeed": "test test test test test test test test test test"
+    }
+}
