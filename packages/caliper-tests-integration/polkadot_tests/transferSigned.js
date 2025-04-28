@@ -84,6 +84,10 @@ class SimpleTransferWorkload extends WorkloadModuleBase {
 
         await this.sutAdapter.sendRequests(args);
     }
+
+    async cleanupWorkloadModule() {
+        await this.api.disconnect();
+    }
 }
 
 /**
