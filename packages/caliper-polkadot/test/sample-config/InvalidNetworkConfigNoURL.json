@@ -8,15 +8,9 @@
     },
     "polkadot": {
         "seeds": [
-            {
-                "uri": "//Alice"
-            },
-            {
-                "uri": "//Bob"
-            },
-            {
-                "uri": "//Charlie"
-            }
+            "//Alice",
+            "//Bob",
+            "//Charlie"
         ]
     }
 }

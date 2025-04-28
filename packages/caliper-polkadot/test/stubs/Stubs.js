@@ -131,7 +131,7 @@ class ApiPromise {
         return new ApiPromise();
     }
 
-    disconnect() {
+    async disconnect() {
         this.connected = false;
     }
 }
@@ -140,7 +140,7 @@ class WsProvider {
     constructor() {
         this.connected = true;
     }
-    disconnect() {
+    async disconnect() {
         this.connected = false;
     }
 }

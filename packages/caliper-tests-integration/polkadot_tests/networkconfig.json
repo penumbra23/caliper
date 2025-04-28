@@ -7,14 +7,13 @@
           }
     },
     "polkadot": {
-        "url": "ws://localhost:9944",
+        "urls": [
+            "ws://localhost:9944"
+        ],
         "seeds": [
-            {
-                "uri": "//Alice"
-            },
-            {
-                "uri": "//Bob"
-            }
-        ]
+            "//Alice",
+            "//Bob"
+        ],
+        "keyType": "sr25519"
     }
 }

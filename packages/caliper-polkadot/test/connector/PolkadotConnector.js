@@ -101,13 +101,19 @@ describe('A Connector Configuration Factory', () => {
     it('should prepare worker args', async () => {
         ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfig));
         const connector = new PolkadotConnector(1, 'polkadot');
-        const result = await connector.prepareWorkerArguments(2).should.not.be.rejected;
+        const result = await connector.prepareWorkerArguments(3).should.not.be.rejected;
         chai.assert(result[0].key.uri === '//Alice');
         chai.assert(result[1].key.uri === '//Bob');
         chai.assert(result[2].key.uri === '//Charlie');
+
         chai.assert(result[0].key.type === 'sr25519');
         chai.assert(result[1].key.type === 'sr25519');
-        chai.assert(result[2].key.type === 'ed25519');
+        chai.assert(result[2].key.type === 'sr25519');
+
+        // Could've also done this dynamically
+        chai.assert(result[0].url === 'ws://localhost:9944');
+        chai.assert(result[1].url === 'ws://rpc.polkadot.example.com');
+        chai.assert(result[2].url === 'ws://localhost:9944');
     });
 
     it('should throw on incorrect number of seeds', async () => {
@@ -120,7 +126,7 @@ describe('A Connector Configuration Factory', () => {
     it('should return a valid context', async () => {
         ConfigUtil.set(ConfigUtil.keys.NetworkConfig, path.resolve(__dirname, validConfig));
         const connector = new PolkadotConnector(1, 'polkadot');
-        const args = await connector.prepareWorkerArguments(1).should.not.be.rejected;
+        const args = await connector.prepareWorkerArguments(2).should.not.be.rejected;
         const context1 = await connector.getContext(0, args[0]).should.not.be.rejected;
         const context2 = await connector.getContext(0, args[1]).should.not.be.rejected;
         chai.assert(context1.nonce.eq(new BN(1)));

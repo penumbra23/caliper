@@ -57,16 +57,18 @@ class PolkadotConnector extends ConnectorBase {
      * @param {object} polkadotConfig The Polkadot networkconfig to check.
      */
     checkConfig(polkadotConfig) {
-        if (!polkadotConfig.url) {
+        if (!polkadotConfig.urls || polkadotConfig.urls.length === 0) {
             throw new Error(
                 'No URL given to access the Polkadot SUT. Please check your network configuration.'
             );
         }
 
-        if (!polkadotConfig.url.toLowerCase().startsWith('ws://') && !polkadotConfig.url.toLowerCase().startsWith('wss://')) {
-            throw new Error(
-                'URL needs to be a Websocket connection.'
-            );
+        for(const url of polkadotConfig.urls) {
+            if (!url.toLowerCase().startsWith('ws://') && !url.toLowerCase().startsWith('wss://')) {
+                throw new Error(
+                    'URL needs to be a Websocket connection.'
+                );
+            }
         }
     }
 
@@ -96,9 +98,8 @@ class PolkadotConnector extends ConnectorBase {
      * @async
      */
     async getContext(roundIndex, args) {
-        this.provider = new WsProvider(this.polkadotConfig.url);
+        this.provider = new WsProvider(args.url);
         this.api = await ApiPromise.create({ provider: this.provider });
-        // TODO: make key type adjustable via config
         const keyring = new Keyring({ type: args.key.type || 'sr25519' });
         const keyPair = keyring.addFromUri(args.key.uri);
         let context = {
@@ -106,7 +107,8 @@ class PolkadotConnector extends ConnectorBase {
             nonce: new BN(0),
             keyPair: keyPair,
             address: keyPair.address,
-            api: this.api
+            api: this.api,
+            url: args.url,
         };
         context.nonce = new BN(await this.api.rpc.system.accountNextIndex(context.address));
         this.context = context;
@@ -115,11 +117,11 @@ class PolkadotConnector extends ConnectorBase {
 
     /**
      * Release the given Polkadot context.
+     * @param {object} context The context returned by getContext.
      * @async
      */
     async releaseContext() {
-        this.api.disconnect();
-        this.provider.disconnect();
+        await this.api.disconnect();
     }
 
     /**
@@ -146,6 +148,29 @@ class PolkadotConnector extends ConnectorBase {
         txStatus.SetVerification(true);
         txStatus.SetStatusSuccess();
         resolve(txStatus);
+    }
+
+    /**
+      * Extracts and returns a string containing error messages from the provided events.
+      * Filters events to find those that represent failed extrinsics and decodes the error messages.
+      *
+      * @param {Array} events - The array of events to extract error messages from.
+      * @returns {string} A concatenated string of error messages derived from the events.
+      */
+    _extractErrorMessage(events) {
+        let msg = new String();
+        events
+            .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
+            .forEach(({ event: { data: [error] } }) => {
+                if (error.isModule) {
+                    const decoded = this.api.registry.findMetaError(error.asModule);
+                    const { docs } = decoded;
+                    msg = msg + docs.join(' ');
+                } else {
+                    msg = msg + error.toString();
+                }
+            });
+        return msg;
     }
 
     /**
@@ -199,18 +224,7 @@ class PolkadotConnector extends ConnectorBase {
 
                 // TODO: handle Sudo calls
 
-                let msg = new String();
-                events
-                    .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
-                    .forEach(({ event: { data: [error] } }) => {
-                        if (error.isModule) {
-                            const decoded = this.api.registry.findMetaError(error.asModule);
-                            const { docs } = decoded;
-                            msg = msg + docs.join(' ');
-                        } else {
-                            msg = msg + error.toString();
-                        }
-                    });
+                let msg = this._extractErrorMessage(events);
                 this._failTx(txStatus, msg, resolve);
                 unsub();
             }
@@ -254,19 +268,7 @@ class PolkadotConnector extends ConnectorBase {
                 );
 
                 // TODO: handle Sudo calls
-
-                let msg = new String();
-                events
-                    .filter(({ event }) => this.api.events.system.ExtrinsicFailed.is(event))
-                    .forEach(({ event: { data: [error, info] } }) => {
-                        if (error.isModule) {
-                            const decoded = this.api.registry.findMetaError(error.asModule);
-                            const { docs } = decoded;
-                            msg = msg + docs.join(' ');
-                        } else {
-                            msg = msg + error.toString();
-                        }
-                    });
+                let msg = this._extractErrorMessage(events);
                 this._failTx(txStatus, msg, resolve);
                 unsub();
             }
@@ -274,22 +276,24 @@ class PolkadotConnector extends ConnectorBase {
     }
     /**
      * It passes deployed contracts addresses to all workers (only known after deploy contract)
-     * @param {Number} number of workers to prepare
-     * @returns {Array} worker args
+     * @param {Number} number Total number of workers that will run
+     * @returns {Array} Worker args passed to getContext
      * @async
      */
     async prepareWorkerArguments(number) {
         let result = [];
-        if (this.polkadotConfig.seeds.length < number) {
+        if (this.polkadotConfig.masterSeed === undefined && this.polkadotConfig.seeds.length < number) {
             throw new Error(`Not enough seeds provided; config.seeds ${this.polkadotConfig.seeds.length} < ${number}`);
         }
-        for (let i = 0 ; i<= number ; i++) {
-            const uri = this.polkadotConfig.seeds[i].uri;
+
+        for (let i = 0; i < number; i++) {
+            const uri = this.polkadotConfig.masterSeed ? `${this.polkadotConfig.masterSeed}//${i}` : this.polkadotConfig.seeds[i];
             result[i] = {
                 key: {
                     uri,
-                    type: this.polkadotConfig.seeds[i].type || 'sr25519',
-                }
+                    type: this.polkadotConfig.keyType || 'sr25519',
+                },
+                url: this.polkadotConfig.urls[i % this.polkadotConfig.urls.length],
             };
         }
         return result;
